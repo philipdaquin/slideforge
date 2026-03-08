@@ -1,0 +1,558 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+
+const THEMES = {
+  'dark-purple': {
+    bg: 'linear-gradient(160deg, #1a0533 0%, #0d0d1a 60%, #2a1050 100%)',
+    accent: '#b39dff', text: '#fff', sub: 'rgba(255,255,255,0.65)',
+    badge_bg: 'rgba(124,92,252,0.25)', num: 'rgba(255,255,255,0.1)'
+  },
+  'neon-dark': {
+    bg: 'linear-gradient(160deg, #050f0a 0%, #000 60%, #001a0d 100%)',
+    accent: '#00ff88', text: '#fff', sub: 'rgba(255,255,255,0.65)',
+    badge_bg: 'rgba(0,255,136,0.15)', num: 'rgba(0,255,136,0.12)'
+  },
+  'sunset': {
+    bg: 'linear-gradient(160deg, #1a0a00 0%, #0d0500 60%, #2a0e00 100%)',
+    accent: '#ff8c42', text: '#fff', sub: 'rgba(255,255,255,0.65)',
+    badge_bg: 'rgba(255,140,66,0.2)', num: 'rgba(255,140,66,0.12)'
+  },
+  'pink-dark': {
+    bg: 'linear-gradient(160deg, #1a001a 0%, #0d000d 60%, #2a0020 100%)',
+    accent: '#fc5c7d', text: '#fff', sub: 'rgba(255,255,255,0.65)',
+    badge_bg: 'rgba(252,92,125,0.2)', num: 'rgba(252,92,125,0.12)'
+  },
+  'ocean': {
+    bg: 'linear-gradient(160deg, #001233 0%, #000a1f 60%, #001a40 100%)',
+    accent: '#4ea8ff', text: '#fff', sub: 'rgba(255,255,255,0.65)',
+    badge_bg: 'rgba(78,168,255,0.2)', num: 'rgba(78,168,255,0.12)'
+  },
+  'clean-white': {
+    bg: 'linear-gradient(160deg, #ffffff 0%, #f5f5f5 100%)',
+    accent: '#1a1a2e', text: '#0c0c0f', sub: 'rgba(0,0,0,0.55)',
+    badge_bg: 'rgba(0,0,0,0.07)', num: 'rgba(0,0,0,0.08)'
+  }
+}
+
+export default function Home() {
+  const [currentSlides, setCurrentSlides] = useState([])
+  const [editingIndex, setEditingIndex] = useState(null)
+  const [history, setHistory] = useState([])
+  const [selectedTheme, setSelectedTheme] = useState('dark-purple')
+  const [activeTypes, setActiveTypes] = useState(['tip', 'feature', 'comparison'])
+  const [overlayOpacity, setOverlayOpacity] = useState(55)
+  const [loading, setLoading] = useState(false)
+  const [toast, setToast] = useState('')
+  const [showToast, setShowToast] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editHeadline, setEditHeadline] = useState('')
+  const [editSub, setEditSub] = useState('')
+  const [progress, setProgress] = useState(0)
+  const [progressActive, setProgressActive] = useState(false)
+  const [pexelsKey, setPexelsKey] = useState('')
+  const [testResult, setTestResult] = useState('')
+  const [testLoading, setTestLoading] = useState(false)
+
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('sf_history')
+    if (savedHistory) {
+      setHistory(JSON.parse(savedHistory))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (showToast) {
+      const timer = setTimeout(() => setShowToast(false), 2500)
+      return () => clearTimeout(timer)
+    }
+  }, [showToast])
+
+  const showToastMsg = (msg) => {
+    setToast(msg)
+    setShowToast(true)
+  }
+
+  const testPexels = async () => {
+    if (!pexelsKey) {
+      setTestResult('⚠ Paste your key first')
+      return
+    }
+    setTestLoading(true)
+    setTestResult('')
+    try {
+      const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent('https://api.pexels.com/v1/search?query=calm&per_page=1')}`, {
+        headers: { Authorization: pexelsKey }
+      })
+      const data = await res.json()
+      if (data.photos && data.photos.length) {
+        setTestResult('✓ Key works! Photos will load on generate.')
+      } else {
+        throw new Error('no photos')
+      }
+    } catch(e) {
+      setTestResult('✗ Key invalid or request failed.')
+    }
+    setTestLoading(false)
+  }
+
+  const fetchPhoto = async (keyword, accessKey) => {
+    const queries = [keyword, 'calm lifestyle minimal', 'peaceful person']
+    for (const q of queries) {
+      try {
+        const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(`https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&orientation=portrait&per_page=10`)}`, {
+          headers: { Authorization: accessKey }
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.photos && data.photos.length) {
+            const photo = data.photos[Math.floor(Math.random() * data.photos.length)]
+            return { url: photo.src.large, credit: photo.photographer, creditLink: photo.photographer_url }
+          }
+        }
+      } catch (e) { console.warn('Photo fetch failed:', e) }
+    }
+    return null
+  }
+
+  const getPhotoKeyword = (slide) => {
+    const keywordMap = {
+      hook: 'person overwhelmed phone anxiety',
+      tip: 'calm focused person desk minimal',
+      feature: 'smartphone productivity clean',
+      comparison: 'before after calm stress relief',
+      stat: 'focus clarity minimal workspace',
+      myth: 'person thinking contemplating',
+      cta: 'person happy phone calm'
+    }
+    return keywordMap[slide.type] || 'calm minimal lifestyle'
+  }
+
+  const generateSlides = async () => {
+    const topic = document.getElementById('topicInput')?.value?.trim()
+    const appName = document.getElementById('appName')?.value?.trim() || 'the app'
+    const cta = document.getElementById('ctaText')?.value?.trim() || `Search ${appName}`
+    const count = parseInt(document.getElementById('slideCount')?.value) || 5
+    const tone = document.getElementById('toneSelect')?.value || 'relatable'
+
+    if (!topic) { showToastMsg('Add a topic first!'); return; }
+
+    setLoading(true)
+    setProgressActive(true)
+    let prog = 0
+    const progInterval = setInterval(() => {
+      prog = Math.min(prog + Math.random() * 15, 88)
+      setProgress(prog)
+    }, 300)
+
+    const toneMap = {
+      relatable: 'raw, honest, ADHD-first-person voice — like a TikTok creator speaking directly to their people',
+      educational: 'clear, informative, slightly authoritative but approachable',
+      hype: 'punchy, bold, uppercase energy — like a hype reel',
+      soft: 'gentle, validating, understanding — speaks to ADHD struggles with empathy'
+    }
+
+    const typeInstructions = activeTypes.length
+      ? `Mix these slide types across the value slides: ${activeTypes.join(', ')}.`
+      : 'Use a mix of tips and feature highlights.'
+
+    const prompt = `You are a TikTok content strategist for a mobile app called "${appName}" — an AI call assistant that makes and takes phone calls for you, designed for the ADHD community.
+
+Generate a TikTok carousel with exactly ${count} slides based on this topic/angle: "${topic}"
+
+Tone: ${toneMap[tone]}
+${typeInstructions}
+
+STRUCTURE (strictly follow this):
+- Slide 1: HOOK — bold, scroll-stopping, speaks directly to ADHD pain around phone calls. No fluff.
+- Slides 2 to ${count - 1}: VALUE slides — tips, features, before/after, or relatable moments. Each has a short punchy headline + 1 sentence of supporting text.
+- Slide ${count}: SOFT CTA — subtle, not salesy. Something like "${cta}". Headline should feel like a natural ending, not an ad.
+
+Return ONLY a JSON array. No markdown, no explanation. Format:
+[
+  { "type": "hook", "headline": "...", "sub": "..." },
+  { "type": "tip"|"feature"|"comparison"|"stat"|"myth", "headline": "...", "sub": "..." },
+  ...
+  { "type": "cta", "headline": "...", "sub": "${cta}" }
+]
+
+Rules:
+- Headlines: 4–10 words max, punchy
+- Sub: 1 sentence, max 15 words
+- ADHD-specific language: executive dysfunction, phone anxiety, paralysis, dopamine, overwhelm — use naturally, not forced
+- The app is never the main character — the ADHD person is. The app is just the solution hinted at.
+- CTA slide sub must be exactly: "${cta}"`
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      })
+
+      const data = await res.json()
+      const raw = data.content.map(b => b.text || '').join('')
+      const clean = raw.replace(/```json|```/g, '').trim()
+      const slides = JSON.parse(clean)
+
+      clearInterval(progInterval)
+      setProgress(100)
+      setTimeout(() => setProgressActive(false), 600)
+
+      setCurrentSlides(slides)
+      
+      if (pexelsKey) {
+        slides.forEach((slide, i) => { slide.photo = null; slide.photoCredit = null; slide.photoCreditLink = null; })
+        setCurrentSlides([...slides])
+        await Promise.all(slides.map(async (slide, i) => {
+          const photo = await fetchPhoto(getPhotoKeyword(slide), pexelsKey)
+          if (photo) {
+            slides[i].photo = photo.url
+            slides[i].photoCredit = photo.credit
+            slides[i].photoCreditLink = photo.creditLink
+          }
+          setCurrentSlides([...slides])
+        }))
+      }
+      saveToHistory(topic, slides)
+
+    } catch (e) {
+      clearInterval(progInterval)
+      setProgressActive(false)
+      showToastMsg('Something went wrong. Try again.')
+      console.error(e)
+    }
+
+    setLoading(false)
+  }
+
+  const saveToHistory = (topic, slides) => {
+    const newHistory = [{ topic, slides, theme: selectedTheme, date: Date.now() }, ...history].slice(0, 5)
+    setHistory(newHistory)
+    localStorage.setItem('sf_history', JSON.stringify(newHistory))
+  }
+
+  const timeAgo = (ts) => {
+    const s = Math.floor((Date.now() - ts) / 1000)
+    if (s < 60) return 'just now'
+    if (s < 3600) return Math.floor(s/60) + 'm ago'
+    if (s < 86400) return Math.floor(s/3600) + 'h ago'
+    return Math.floor(s/86400) + 'd ago'
+  }
+
+  const exportSlides = () => {
+    const text = currentSlides.map((s, i) =>
+      `SLIDE ${i+1} [${s.type.toUpperCase()}]\n${s.headline}\n${s.sub || ''}`
+    ).join('\n\n---\n\n')
+    navigator.clipboard.writeText(text).then(() => showToastMsg('Copied to clipboard! 🎉'))
+  }
+
+  const openEdit = (i) => {
+    setEditingIndex(i)
+    setEditHeadline(currentSlides[i].headline)
+    setEditSub(currentSlides[i].sub || '')
+    setModalOpen(true)
+  }
+
+  const closeModal = () => {
+    setModalOpen(false)
+    setEditingIndex(null)
+  }
+
+  const saveEdit = () => {
+    if (editingIndex === null) return
+    const newSlides = [...currentSlides]
+    newSlides[editingIndex].headline = editHeadline
+    newSlides[editingIndex].sub = editSub
+    setCurrentSlides(newSlides)
+    closeModal()
+    showToastMsg('Slide updated!')
+  }
+
+  const getFontSize = (text) => {
+    const len = text.length
+    if (len < 30) return '26px'
+    if (len < 50) return '22px'
+    return '18px'
+  }
+
+  const theme = THEMES[selectedTheme]
+  const overlayColor = selectedTheme === 'clean-white'
+    ? `rgba(255,255,255,${overlayOpacity / 100})`
+    : `rgba(0,0,0,${overlayOpacity / 100})`
+
+  const badgeLabels = { hook: '🔥 Hook', tip: '💡 Tip', feature: '⚡ Feature', comparison: '↔ Before/After', stat: '📊 Stat', myth: '❌ Myth', cta: '👋 CTA' }
+
+  return (
+    <>
+      <header>
+        <div className="logo-dot"></div>
+        <h1>SlideForge</h1>
+        <span>TikTok Carousel Generator</span>
+      </header>
+
+      <div className="app">
+        <div className="panel">
+          <div className="panel-section">
+            <label>Topic / Hook Angle</label>
+            <textarea id="topicInput" placeholder="e.g. Phone anxiety is stopping you from being productive — here's how ADHD brains can finally take back control of calls..."></textarea>
+          </div>
+
+          <div className="panel-section">
+            <label>App Name</label>
+            <input type="text" id="appName" defaultValue="RingPilot" placeholder="Your app name" />
+          </div>
+
+          <div className="panel-section">
+            <label>Soft CTA</label>
+            <input type="text" id="ctaText" defaultValue="Search RingPilot 👀" placeholder="e.g. Search [app] in the App Store" />
+          </div>
+
+          <div className="row">
+            <div className="panel-section">
+              <label>No. of Slides</label>
+              <select id="slideCount">
+                <option value="4">4 slides</option>
+                <option value="5" selected>5 slides</option>
+                <option value="6">6 slides</option>
+                <option value="7">7 slides</option>
+              </select>
+            </div>
+            <div className="panel-section">
+              <label>Tone</label>
+              <select id="toneSelect">
+                <option value="relatable">Relatable / Raw</option>
+                <option value="educational">Educational</option>
+                <option value="hype">Hype / Bold</option>
+                <option value="soft">Soft / Gentle</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="panel-section">
+            <label>Slide Types</label>
+            <div className="type-grid">
+              {['tip', 'feature', 'comparison', 'stat', 'myth'].map(type => (
+                <div
+                  key={type}
+                  className={`type-tag ${activeTypes.includes(type) ? 'active' : ''}`}
+                  onClick={() => {
+                    const newTypes = activeTypes.includes(type)
+                      ? activeTypes.filter(t => t !== type)
+                      : [...activeTypes, type]
+                    setActiveTypes(newTypes)
+                  }}
+                >
+                  {type === 'tip' && '💡 Tips'}
+                  {type === 'feature' && '⚡ Features'}
+                  {type === 'comparison' && '↔️ Before/After'}
+                  {type === 'stat' && '📊 Stats'}
+                  {type === 'myth' && '❌ Myth Bust'}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="panel-section">
+            <label>Color Theme</label>
+            <div className="themes">
+              {Object.entries({
+                'dark-purple': { background: 'linear-gradient(135deg,#1a0533,#7c5cfc)' },
+                'neon-dark': { background: 'linear-gradient(135deg,#000,#00ff88)' },
+                'sunset': { background: 'linear-gradient(135deg,#1a0a00,#ff5f00)' },
+                'pink-dark': { background: 'linear-gradient(135deg,#1a0015,#fc5c7d)' },
+                'ocean': { background: 'linear-gradient(135deg,#001233,#0077ff)' },
+                'clean-white': { background: 'linear-gradient(135deg,#f0f0f0,#fff)', border: '1px solid #ddd' }
+              }).map(([key, style]) => (
+                <div
+                  key={key}
+                  className={`theme-btn ${selectedTheme === key ? 'active' : ''}`}
+                  data-theme={key}
+                  style={style}
+                  title={key.replace('-', ' ')}
+                  onClick={() => {
+                    setSelectedTheme(key)
+                    if (currentSlides.length) setCurrentSlides([...currentSlides])
+                  }}
+                ></div>
+              ))}
+            </div>
+          </div>
+
+          <div className="panel-section">
+            <label>Pexels API Key <a href="https://www.pexels.com/api/" target="_blank" style={{color:'var(--accent)',fontSize:'10px',textDecoration:'none',marginLeft:'4px'}}>get free key →</a></label>
+            <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+              <input 
+                type="text" 
+                id="unsplashKey" 
+                placeholder="Paste your Pexels API Key" 
+                style={{fontSize:'12px',flex:1}}
+                value={pexelsKey}
+                onChange={(e) => setPexelsKey(e.target.value)}
+              />
+              <button 
+                onClick={testPexels} 
+                style={{padding:'10px 12px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'10px',color:'var(--text)',fontSize:'12px',cursor:'pointer',whiteSpace:'nowrap'}}
+                disabled={testLoading}
+              >
+                {testLoading ? '...' : 'Test'}
+              </button>
+            </div>
+            {testResult && (
+              <div style={{
+                fontSize:'11px',
+                marginTop:'6px',
+                display: testResult ? 'block' : 'none',
+                color: testResult.includes('✓') ? '#5cfca0' : '#fc5c7d'
+              }}>
+                {testResult}
+              </div>
+            )}
+          </div>
+
+          <div className="panel-section">
+            <label>Photo Overlay Darkness</label>
+            <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+              <input 
+                type="range" 
+                id="overlayOpacity" 
+                min="30" 
+                max="85" 
+                value={overlayOpacity}
+                onChange={(e) => {
+                  setOverlayOpacity(parseInt(e.target.value))
+                  if (currentSlides.length) setCurrentSlides([...currentSlides])
+                }}
+                style={{flex:1,padding:0,background:'transparent',border:'none',accentColor:'var(--accent)'}} 
+              />
+              <span style={{fontSize:'12px',color:'var(--muted)',width:'30px'}}>{overlayOpacity}%</span>
+            </div>
+          </div>
+
+          <button className={`gen-btn ${loading ? 'loading' : ''}`} onClick={generateSlides} disabled={loading}>
+            <div className="spinner"></div>
+            <span className="btn-text">✦ Generate Carousel</span>
+          </button>
+
+          <div className={`progress-bar ${progressActive ? 'active' : ''}`}>
+            <div className="progress-fill" style={{width: `${progress}%`}}></div>
+          </div>
+
+          {history.length > 0 && (
+            <div className="history-section">
+              <h3>RECENT BATCHES</h3>
+              {history.map((item, i) => (
+                <div 
+                  key={i} 
+                  className="history-item"
+                  onClick={() => {
+                    setCurrentSlides(item.slides)
+                    setSelectedTheme(item.theme || selectedTheme)
+                  }}
+                >
+                  <div className="hi-topic">{item.topic}</div>
+                  <div className="hi-meta">{item.slides.length} slides · {timeAgo(item.date)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="canvas-area" id="canvasArea">
+          {currentSlides.length === 0 ? (
+            <div className="empty-state">
+              <div className="big">✦</div>
+              <p>Fill in your topic and hit Generate</p>
+              <p style={{fontSize:'12px', marginTop:'4px', color:'#555'}}>AI writes the slides, you export & post</p>
+            </div>
+          ) : (
+            <div className="slides-section">
+              <div className="slides-header">
+                <h2>{currentSlides.length} Slides Ready ✦</h2>
+                <button className="export-btn" onClick={exportSlides}>⬇ Copy All Text</button>
+              </div>
+              <div className="slides-scroll">
+                {currentSlides.map((slide, i) => (
+                  <div key={i} className="slide-wrap">
+                    <div className="slide-num">Slide {i + 1} of {currentSlides.length}</div>
+                    <div 
+                      className={`slide slide-type-${slide.type}`}
+                      style={!slide.photo ? { background: theme.bg } : {}}
+                      onClick={() => openEdit(i)}
+                    >
+                      {slide.photo && (
+                        <>
+                          <img className="slide-photo" src={slide.photo} loading="lazy" alt="" />
+                          <div className="slide-photo-overlay" style={{background: overlayColor}}></div>
+                        </>
+                      )}
+                      {!slide.photo && pexelsKey && <div className="photo-loading">loading photo...</div>}
+                      <div className="slide-inner">
+                        <div className="slide-badge" style={{background: theme.badge_bg, color: theme.accent}}>
+                          {badgeLabels[slide.type] || slide.type}
+                        </div>
+                        <div className="slide-headline" style={{color: theme.text, fontSize: getFontSize(slide.headline)}}>
+                          {slide.headline}
+                        </div>
+                        {slide.sub && <div className="slide-sub" style={{color: theme.sub}}>{slide.sub}</div>}
+                        {slide.type === 'cta' && (
+                          <div className="slide-cta-text" style={{color: theme.accent, marginTop:'auto', paddingTop:'16px'}}>
+                            → {slide.sub}
+                          </div>
+                        )}
+                        <div className="slide-number-pill" style={{background: theme.num, color: theme.text}}>{i+1}</div>
+                      </div>
+                      {slide.photoCredit && (
+                        <a className="photo-credit" href={slide.photoCreditLink} target="_blank" rel="noopener noreferrer">
+                          📷 {slide.photoCredit} / Pexels
+                        </a>
+                      )}
+                      <div className="slide-edit-overlay">
+                        <div style={{fontSize:'20px'}}>✏️</div>
+                        <div className="edit-hint">Click to edit</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className={`modal-bg ${modalOpen ? 'open' : ''}`} onClick={(e) => e.target.classList.contains('modal-bg') && closeModal()}>
+        <div className="modal">
+          <h3>Edit Slide</h3>
+          <div className="panel-section">
+            <label>Headline</label>
+            <textarea 
+              id="editHeadline" 
+              rows="3" 
+              value={editHeadline}
+              onChange={(e) => setEditHeadline(e.target.value)}
+            />
+          </div>
+          <div className="panel-section">
+            <label>Subtext (optional)</label>
+            <textarea 
+              id="editSub" 
+              rows="2" 
+              value={editSub}
+              onChange={(e) => setEditSub(e.target.value)}
+            />
+          </div>
+          <div className="modal-actions">
+            <button className="modal-cancel" onClick={closeModal}>Cancel</button>
+            <button className="modal-save" onClick={saveEdit}>Save</button>
+          </div>
+        </div>
+      </div>
+
+      <div className={`toast ${showToast ? 'show' : ''}`}>{toast}</div>
+    </>
+  )
+}

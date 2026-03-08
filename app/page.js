@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import html2canvas from 'html2canvas'
+import JSZip from 'jszip'
 
 const THEMES = {
   'dark-purple': {
@@ -53,6 +55,9 @@ export default function Home() {
   const [pexelsKey, setPexelsKey] = useState('')
   const [testResult, setTestResult] = useState('')
   const [testLoading, setTestLoading] = useState(false)
+  const [importingIndex, setImportingIndex] = useState(null)
+  const fileInputRef = useRef(null)
+  const slideRefs = useRef({})
 
   useEffect(() => {
     const savedHistory = localStorage.getItem('sf_history')
@@ -280,6 +285,73 @@ Rules:
     return '18px'
   }
 
+  const handleImportClick = (index) => {
+    setImportingIndex(index)
+    fileInputRef.current?.click()
+  }
+
+  const handleImageImport = (e) => {
+    const file = e.target.files?.[0]
+    if (!file || importingIndex === null) return
+    
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const newSlides = [...currentSlides]
+      newSlides[importingIndex].photo = event.target?.result
+      newSlides[importingIndex].photoCredit = null
+      newSlides[importingIndex].photoCreditLink = null
+      setCurrentSlides(newSlides)
+      setImportingIndex(null)
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  const removeImage = (e, index) => {
+    e.stopPropagation()
+    const newSlides = [...currentSlides]
+    newSlides[index].photo = null
+    newSlides[index].photoCredit = null
+    newSlides[index].photoCreditLink = null
+    setCurrentSlides(newSlides)
+  }
+
+  const exportSlidesAsImages = async () => {
+    if (currentSlides.length === 0) return
+    
+    showToastMsg('Generating images...')
+    const zip = new JSZip()
+    const folder = zip.folder('slides')
+    
+    for (let i = 0; i < currentSlides.length; i++) {
+      const slideEl = slideRefs.current[i]
+      if (slideEl) {
+        try {
+          const canvas = await html2canvas(slideEl, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: null,
+            logging: false
+          })
+          const dataUrl = canvas.toDataURL('image/png')
+          const base64 = dataUrl.split(',')[1]
+          folder.file(`slide-${i + 1}.png`, base64, { base64: true })
+        } catch (err) {
+          console.error('Failed to export slide', i, err)
+        }
+      }
+    }
+    
+    const content = await zip.generateAsync({ type: 'blob' })
+    const url = URL.createObjectURL(content)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'tiktok-carousel.zip'
+    a.click()
+    URL.revokeObjectURL(url)
+    showToastMsg('Downloaded carousel!')
+  }
+
   const theme = THEMES[selectedTheme]
   const overlayColor = selectedTheme === 'clean-white'
     ? `rgba(255,255,255,${overlayOpacity / 100})`
@@ -473,13 +545,17 @@ Rules:
             <div className="slides-section">
               <div className="slides-header">
                 <h2>{currentSlides.length} Slides Ready ✦</h2>
-                <button className="export-btn" onClick={exportSlides}>⬇ Copy All Text</button>
+                <div style={{display:'flex', gap:'8px'}}>
+                  <button className="export-btn" onClick={exportSlides}>⬇ Copy Text</button>
+                  <button className="export-btn" style={{background:'var(--accent)'}} onClick={exportSlidesAsImages}>⬇ Download Images</button>
+                </div>
               </div>
               <div className="slides-scroll">
                 {currentSlides.map((slide, i) => (
                   <div key={i} className="slide-wrap">
                     <div className="slide-num">Slide {i + 1} of {currentSlides.length}</div>
                     <div 
+                      ref={el => slideRefs.current[i] = el}
                       className={`slide slide-type-${slide.type}`}
                       style={!slide.photo ? { background: theme.bg } : {}}
                       onClick={() => openEdit(i)}
@@ -511,9 +587,27 @@ Rules:
                           📷 {slide.photoCredit} / Pexels
                         </a>
                       )}
-                      <div className="slide-edit-overlay">
+                      {slide.photo && !slide.photoCredit && (
+                        <div 
+                          className="photo-remove" 
+                          onClick={(e) => removeImage(e, i)}
+                          style={{
+                            position:'absolute', top:'8px', right:'8px', 
+                            background:'rgba(0,0,0,0.6)', border:'none', 
+                            borderRadius:'50%', width:'24px', height:'24px',
+                            color:'white', cursor:'pointer', fontSize:'12px',
+                            display:'flex', alignItems:'center', justifyContent:'center',
+                            zIndex:20
+                          }}
+                        >✕</div>
+                      )}
+                      <div className="slide-import-overlay" onClick={(e) => { e.stopPropagation(); handleImportClick(i); }}>
+                        <div style={{fontSize:'20px'}}>📷</div>
+                        <div className="edit-hint">{slide.photo ? 'Change photo' : 'Add photo'}</div>
+                      </div>
+                      <div className="slide-edit-overlay" onClick={(e) => { e.stopPropagation(); openEdit(i); }}>
                         <div style={{fontSize:'20px'}}>✏️</div>
-                        <div className="edit-hint">Click to edit</div>
+                        <div className="edit-hint">Edit text</div>
                       </div>
                     </div>
                   </div>
@@ -523,6 +617,14 @@ Rules:
           )}
         </div>
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleImageImport}
+      />
 
       <div className={`modal-bg ${modalOpen ? 'open' : ''}`} onClick={(e) => e.target.classList.contains('modal-bg') && closeModal()}>
         <div className="modal">

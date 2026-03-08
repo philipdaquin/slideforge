@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TikTok Slide Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg: #0c0c0f;
+  --surface: #16161a;
+  --surface2: #1e1e24;
+  --border: #2a2a35;
+  --accent: #7c5cfc;
+  --accent2: #fc5c7d;
+  --green: #5cfca0;
+  --text: #f2f2f5;
+  --muted: #888;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* HEADER */
+header {
+  padding: 24px 32px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.logo-dot { width:10px; height:10px; border-radius:50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+header h1 { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
+header span { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+/* LAYOUT */
+.app {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+/* LEFT PANEL */
+.panel {
+  border-right: 1px solid var(--border);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  overflow-y: auto;
+}
+.panel-section label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+textarea, input, select {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  resize: none;
+}
+textarea:focus, input:focus, select:focus { border-color: var(--accent); }
+textarea { height: 80px; }
+
+.row { display: flex; gap: 10px; }
+.row .panel-section { flex: 1; }
+
+/* THEME SWATCHES */
+.themes { display: flex; gap: 8px; flex-wrap: wrap; }
+.theme-btn {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+  position: relative;
+}
+.theme-btn:hover { transform: scale(1.1); }
+.theme-btn.active { border-color: white; }
+.theme-btn::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: white;
+  opacity: 0;
+}
+.theme-btn.active::after { opacity: 1; }
+
+/* SLIDE TYPE TOGGLES */
+.type-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.type-tag {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+  background: var(--surface2);
+}
+.type-tag.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* GENERATE BTN */
+.gen-btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: white;
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  letter-spacing: 0.3px;
+}
+.gen-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.gen-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.gen-btn .spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: none;
+}
+.gen-btn.loading .spinner { display: block; }
+.gen-btn.loading .btn-text { opacity: 0.6; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* RIGHT: CANVAS AREA */
+.canvas-area {
+  padding: 32px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+}
+.empty-state .big { font-size: 48px; }
+.empty-state p { font-size: 14px; }
+
+/* SLIDES ROW */
+.slides-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.slides-header h2 { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; }
+.export-btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  background: var(--green);
+  color: #0c0c0f;
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.export-btn:hover { opacity: 0.85; }
+
+.slides-scroll {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.slides-scroll::-webkit-scrollbar { height: 4px; }
+.slides-scroll::-webkit-scrollbar-track { background: var(--surface); }
+.slides-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* INDIVIDUAL SLIDE */
+.slide-wrap {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.slide-num {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+
+.slide {
+  width: 270px;
+  height: 480px;
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+  background-color: #111;
+}
+.slide:hover { transform: scale(1.02); }
+
+/* PHOTO BACKGROUND */
+.slide-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  transition: opacity 0.5s ease;
+}
+.slide-photo-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.photo-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  color: rgba(255,255,255,0.2);
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.photo-credit {
+  position: absolute;
+  bottom: 8px;
+  left: 10px;
+  font-size: 9px;
+  color: rgba(255,255,255,0.3);
+  z-index: 3;
+  text-decoration: none;
+}
+
+/* SLIDE INNER CONTENT */
+.slide-inner {
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 22px;
+  position: relative;
+  z-index: 2;
+}
+.slide-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  width: fit-content;
+}
+.slide-type-hook .slide-badge { background: rgba(255,255,255,0.15); color: white; }
+.slide-type-tip .slide-badge { background: rgba(92,252,160,0.2); color: #5cfca0; }
+.slide-type-cta .slide-badge { background: rgba(252,92,125,0.2); color: #fc5c7d; }
+.slide-type-feature .slide-badge { background: rgba(124,92,252,0.2); color: #b39dff; }
+.slide-type-comparison .slide-badge { background: rgba(255,200,50,0.2); color: #ffd166; }
+
+.slide-headline {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  line-height: 1.15;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.slide-sub {
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.75;
+  margin-top: 12px;
+}
+.slide-cta-text {
+  margin-top: auto;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.6;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.slide-number-pill {
+  position: absolute;
+  bottom: 18px;
+  right: 18px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* EDIT OVERLAY */
+.slide-edit-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 10;
+  border-radius: 16px;
+}
+.slide:hover .slide-edit-overlay { opacity: 1; }
+.edit-hint { font-size: 12px; color: rgba(255,255,255,0.7); }
+
+/* EDIT MODAL */
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  display: none;
+}
+.modal-bg.open { display: flex; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.modal h3 { font-family: 'Syne', sans-serif; font-size: 16px; }
+.modal textarea { height: 100px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.modal-cancel {
+  padding: 9px 18px;
+  border-radius: 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+}
+.modal-save {
+  padding: 9px 18px;
+  border-radius: 8px;
+  background: var(--accent);
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* TOAST */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  background: var(--green);
+  color: #0c0c0f;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  transform: translateY(60px);
+  opacity: 0;
+  transition: all 0.3s;
+  z-index: 999;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+
+/* HISTORY */
+.history-section { border-top: 1px solid var(--border); padding-top: 16px; }
+.history-section h3 { font-family: 'Syne', sans-serif; font-size: 13px; color: var(--muted); margin-bottom: 12px; letter-spacing: 0.5px; }
+.history-item {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  font-size: 13px;
+}
+.history-item:hover { border-color: var(--accent); }
+.history-item .hi-topic { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history-item .hi-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+/* PROGRESS BAR */
+.progress-bar {
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  overflow: hidden;
+  margin-top: 6px;
+  display: none;
+}
+.progress-bar.active { display: block; }
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius: 1px;
+  width: 0%;
+  transition: width 0.4s ease;
+}
+
+/* Scrollbar */
+.panel::-webkit-scrollbar { width: 4px; }
+.panel::-webkit-scrollbar-track { background: transparent; }
+.panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-dot"></div>
+  <h1>SlideForge</h1>
+  <span>TikTok Carousel Generator</span>
+</header>
+
+<div class="app">
+
+  <!-- LEFT PANEL -->
+  <div class="panel">
+
+    <div class="panel-section">
+      <label>Topic / Hook Angle</label>
+      <textarea id="topicInput" placeholder="e.g. Phone anxiety is stopping you from being productive — here's how ADHD brains can finally take back control of calls..."></textarea>
+    </div>
+
+    <div class="panel-section">
+      <label>App Name</label>
+      <input type="text" id="appName" value="RingPilot" placeholder="Your app name">
+    </div>
+
+    <div class="panel-section">
+      <label>Soft CTA</label>
+      <input type="text" id="ctaText" value="Search RingPilot 👀" placeholder="e.g. Search [app] in the App Store">
+    </div>
+
+    <div class="row">
+      <div class="panel-section">
+        <label>No. of Slides</label>
+        <select id="slideCount">
+          <option value="4">4 slides</option>
+          <option value="5" selected>5 slides</option>
+          <option value="6">6 slides</option>
+          <option value="7">7 slides</option>
+        </select>
+      </div>
+      <div class="panel-section">
+        <label>Tone</label>
+        <select id="toneSelect">
+          <option value="relatable">Relatable / Raw</option>
+          <option value="educational">Educational</option>
+          <option value="hype">Hype / Bold</option>
+          <option value="soft">Soft / Gentle</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <label>Slide Types</label>
+      <div class="type-grid">
+        <div class="type-tag active" data-type="tip">💡 Tips</div>
+        <div class="type-tag active" data-type="feature">⚡ Features</div>
+        <div class="type-tag active" data-type="comparison">↔️ Before/After</div>
+        <div class="type-tag" data-type="stat">📊 Stats</div>
+        <div class="type-tag" data-type="myth">❌ Myth Bust</div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <label>Color Theme</label>
+      <div class="themes">
+        <div class="theme-btn active" data-theme="dark-purple" style="background: linear-gradient(135deg,#1a0533,#7c5cfc)" title="Dark Purple"></div>
+        <div class="theme-btn" data-theme="neon-dark" style="background: linear-gradient(135deg,#000,#00ff88)" title="Neon Dark"></div>
+        <div class="theme-btn" data-theme="sunset" style="background: linear-gradient(135deg,#1a0a00,#ff5f00)" title="Sunset"></div>
+        <div class="theme-btn" data-theme="pink-dark" style="background: linear-gradient(135deg,#1a0015,#fc5c7d)" title="Hot Pink"></div>
+        <div class="theme-btn" data-theme="ocean" style="background: linear-gradient(135deg,#001233,#0077ff)" title="Ocean"></div>
+        <div class="theme-btn" data-theme="clean-white" style="background: linear-gradient(135deg,#f0f0f0,#fff); border: 1px solid #ddd" title="Clean White"></div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <label>Pexels API Key <a href="https://www.pexels.com/api/" target="_blank" style="color:var(--accent);font-size:10px;text-decoration:none;margin-left:4px">get free key →</a></label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="unsplashKey" placeholder="Paste your Pexels API Key" style="font-size:12px;flex:1">
+        <button onclick="testPexels()" style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap" id="testBtn">Test</button>
+      </div>
+      <div id="testResult" style="font-size:11px;margin-top:6px;display:none"></div>
+    </div>
+
+    <div class="panel-section">
+      <label>Photo Overlay Darkness</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="range" id="overlayOpacity" min="30" max="85" value="55" style="flex:1;padding:0;background:transparent;border:none;accent-color:var(--accent)">
+        <span id="overlayVal" style="font-size:12px;color:var(--muted);width:30px">55%</span>
+      </div>
+    </div>
+
+    <button class="gen-btn" id="genBtn" onclick="generateSlides()">
+      <div class="spinner"></div>
+      <span class="btn-text">✦ Generate Carousel</span>
+    </button>
+
+    <div class="progress-bar" id="progressBar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <div class="history-section" id="historySection" style="display:none">
+      <h3>RECENT BATCHES</h3>
+      <div id="historyList"></div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT CANVAS -->
+  <div class="canvas-area" id="canvasArea">
+    <div class="empty-state" id="emptyState">
+      <div class="big">✦</div>
+      <p>Fill in your topic and hit Generate</p>
+      <p style="font-size:12px; margin-top:4px; color:#555">AI writes the slides, you export & post</p>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3>Edit Slide</h3>
+    <div class="panel-section">
+      <label>Headline</label>
+      <textarea id="editHeadline" rows="3"></textarea>
+    </div>
+    <div class="panel-section">
+      <label>Subtext (optional)</label>
+      <textarea id="editSub" rows="2"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-save" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────
+let currentSlides = [];
+let editingIndex = null;
+let history = JSON.parse(localStorage.getItem('sf_history') || '[]');
+let selectedTheme = 'dark-purple';
+let activeTypes = ['tip', 'feature', 'comparison'];
+
+const THEMES = {
+  'dark-purple': {
+    bg: 'linear-gradient(160deg, #1a0533 0%, #0d0d1a 60%, #2a1050 100%)',
+    accent: '#b39dff', text: '#fff', sub: 'rgba(255,255,255,0.65)',
+    badge_bg: 'rgba(124,92,252,0.25)', num: 'rgba(255,255,255,0.1)'
+  },
+  'neon-dark': {
+    bg: 'linear-gradient(160deg, #050f0a 0%, #000 60%, #001a0d 100%)',
+    accent: '#00ff88', text: '#fff', sub: 'rgba(255,255,255,0.65)',
+    badge_bg: 'rgba(0,255,136,0.15)', num: 'rgba(0,255,136,0.12)'
+  },
+  'sunset': {
+    bg: 'linear-gradient(160deg, #1a0a00 0%, #0d0500 60%, #2a0e00 100%)',
+    accent: '#ff8c42', text: '#fff', sub: 'rgba(255,255,255,0.65)',
+    badge_bg: 'rgba(255,140,66,0.2)', num: 'rgba(255,140,66,0.12)'
+  },
+  'pink-dark': {
+    bg: 'linear-gradient(160deg, #1a001a 0%, #0d000d 60%, #2a0020 100%)',
+    accent: '#fc5c7d', text: '#fff', sub: 'rgba(255,255,255,0.65)',
+    badge_bg: 'rgba(252,92,125,0.2)', num: 'rgba(252,92,125,0.12)'
+  },
+  'ocean': {
+    bg: 'linear-gradient(160deg, #001233 0%, #000a1f 60%, #001a40 100%)',
+    accent: '#4ea8ff', text: '#fff', sub: 'rgba(255,255,255,0.65)',
+    badge_bg: 'rgba(78,168,255,0.2)', num: 'rgba(78,168,255,0.12)'
+  },
+  'clean-white': {
+    bg: 'linear-gradient(160deg, #ffffff 0%, #f5f5f5 100%)',
+    accent: '#1a1a2e', text: '#0c0c0f', sub: 'rgba(0,0,0,0.55)',
+    badge_bg: 'rgba(0,0,0,0.07)', num: 'rgba(0,0,0,0.08)'
+  }
+};
+
+// ─── THEME SELECTION ─────────────────────────────────────
+document.querySelectorAll('.theme-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedTheme = btn.dataset.theme;
+    if (currentSlides.length) renderSlides(currentSlides);
+  });
+});
+
+// ─── TYPE TOGGLES ─────────────────────────────────────────
+document.querySelectorAll('.type-tag').forEach(tag => {
+  tag.addEventListener('click', () => {
+    tag.classList.toggle('active');
+    activeTypes = [...document.querySelectorAll('.type-tag.active')].map(t => t.dataset.type);
+  });
+});
+
+// ─── OVERLAY SLIDER ───────────────────────────────────────
+document.getElementById('overlayOpacity').addEventListener('input', function() {
+  document.getElementById('overlayVal').textContent = this.value + '%';
+  if (currentSlides.length) renderSlides(currentSlides);
+});
+
+// ─── TEST PEXELS KEY ──────────────────────────────────────
+async function testPexels() {
+  const key = document.getElementById('unsplashKey').value.trim();
+  const result = document.getElementById('testResult');
+  const btn = document.getElementById('testBtn');
+  if (!key) { result.style.display='block'; result.style.color='#fc5c7d'; result.textContent='⚠ Paste your key first'; return; }
+  btn.textContent = '...';
+  result.style.display = 'none';
+  try {
+    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent('https://api.pexels.com/v1/search?query=calm&per_page=1')}`, {
+      headers: { Authorization: key }
+    });
+    const data = await res.json();
+    if (data.photos && data.photos.length) {
+      result.style.display = 'block';
+      result.style.color = '#5cfca0';
+      result.textContent = '✓ Key works! Photos will load on generate.';
+    } else {
+      throw new Error('no photos');
+    }
+  } catch(e) {
+    result.style.display = 'block';
+    result.style.color = '#fc5c7d';
+    result.textContent = '✗ Key invalid or request failed. Double-check it.';
+  }
+  btn.textContent = 'Test';
+}
+
+// ─── PEXELS FETCH ─────────────────────────────────────────
+async function fetchPhoto(keyword, accessKey) {
+  const queries = [keyword, 'calm lifestyle minimal', 'peaceful person'];
+  for (const q of queries) {
+    try {
+      const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(`https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&orientation=portrait&per_page=10`)}`, {
+        headers: { Authorization: accessKey }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.photos && data.photos.length) {
+          const photo = data.photos[Math.floor(Math.random() * data.photos.length)];
+          return { url: photo.src.large, credit: photo.photographer, creditLink: photo.photographer_url };
+        }
+      }
+    } catch (e) { console.warn('Photo fetch failed:', e); }
+  }
+  return null;
+}
+
+function getPhotoKeyword(slide) {
+  const keywordMap = {
+    hook: 'person overwhelmed phone anxiety',
+    tip: 'calm focused person desk minimal',
+    feature: 'smartphone productivity clean',
+    comparison: 'before after calm stress relief',
+    stat: 'focus clarity minimal workspace',
+    myth: 'person thinking contemplating',
+    cta: 'person happy phone calm'
+  };
+  return keywordMap[slide.type] || 'calm minimal lifestyle';
+}
+
+// ─── GENERATE ─────────────────────────────────────────────
+async function generateSlides() {
+  const topic = document.getElementById('topicInput').value.trim();
+  const appName = document.getElementById('appName').value.trim() || 'the app';
+  const cta = document.getElementById('ctaText').value.trim() || `Search ${appName}`;
+  const count = parseInt(document.getElementById('slideCount').value);
+  const tone = document.getElementById('toneSelect').value;
+
+  if (!topic) { showToast('Add a topic first!'); return; }
+
+  const btn = document.getElementById('genBtn');
+  btn.classList.add('loading');
+  btn.disabled = true;
+
+  const progressBar = document.getElementById('progressBar');
+  const progressFill = document.getElementById('progressFill');
+  progressBar.classList.add('active');
+  let prog = 0;
+  const progInterval = setInterval(() => {
+    prog = Math.min(prog + Math.random() * 15, 88);
+    progressFill.style.width = prog + '%';
+  }, 300);
+
+  const toneMap = {
+    relatable: 'raw, honest, ADHD-first-person voice — like a TikTok creator speaking directly to their people',
+    educational: 'clear, informative, slightly authoritative but approachable',
+    hype: 'punchy, bold, uppercase energy — like a hype reel',
+    soft: 'gentle, validating, understanding — speaks to ADHD struggles with empathy'
+  };
+
+  const typeInstructions = activeTypes.length
+    ? `Mix these slide types across the value slides: ${activeTypes.join(', ')}.`
+    : 'Use a mix of tips and feature highlights.';
+
+  const prompt = `You are a TikTok content strategist for a mobile app called "${appName}" — an AI call assistant that makes and takes phone calls for you, designed for the ADHD community.
+
+Generate a TikTok carousel with exactly ${count} slides based on this topic/angle: "${topic}"
+
+Tone: ${toneMap[tone]}
+${typeInstructions}
+
+STRUCTURE (strictly follow this):
+- Slide 1: HOOK — bold, scroll-stopping, speaks directly to ADHD pain around phone calls. No fluff.
+- Slides 2 to ${count - 1}: VALUE slides — tips, features, before/after, or relatable moments. Each has a short punchy headline + 1 sentence of supporting text.
+- Slide ${count}: SOFT CTA — subtle, not salesy. Something like "${cta}". Headline should feel like a natural ending, not an ad.
+
+Return ONLY a JSON array. No markdown, no explanation. Format:
+[
+  { "type": "hook", "headline": "...", "sub": "..." },
+  { "type": "tip"|"feature"|"comparison"|"stat"|"myth", "headline": "...", "sub": "..." },
+  ...
+  { "type": "cta", "headline": "...", "sub": "${cta}" }
+]
+
+Rules:
+- Headlines: 4–10 words max, punchy
+- Sub: 1 sentence, max 15 words
+- ADHD-specific language: executive dysfunction, phone anxiety, paralysis, dopamine, overwhelm — use naturally, not forced
+- The app is never the main character — the ADHD person is. The app is just the solution hinted at.
+- CTA slide sub must be exactly: "${cta}"`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const data = await res.json();
+    const raw = data.content.map(b => b.text || '').join('');
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const slides = JSON.parse(clean);
+
+    clearInterval(progInterval);
+    progressFill.style.width = '100%';
+    setTimeout(() => progressBar.classList.remove('active'), 600);
+
+    currentSlides = slides;
+    // fetch photos
+    const accessKey = document.getElementById('unsplashKey').value.trim();
+    if (accessKey) {
+      slides.forEach((slide, i) => { slide.photo = null; slide.photoCredit = null; slide.photoCreditLink = null; });
+      renderSlides(slides);
+      await Promise.all(slides.map(async (slide, i) => {
+        const photo = await fetchPhoto(getPhotoKeyword(slide), accessKey);
+        if (photo) {
+          slides[i].photo = photo.url;
+          slides[i].photoCredit = photo.credit;
+          slides[i].photoCreditLink = photo.creditLink;
+        }
+        renderSlides(slides);
+      }));
+    } else {
+      renderSlides(slides);
+    }
+    saveToHistory(topic, slides);
+
+  } catch (e) {
+    clearInterval(progInterval);
+    progressBar.classList.remove('active');
+    showToast('Something went wrong. Try again.');
+    console.error(e);
+  }
+
+  btn.classList.remove('loading');
+  btn.disabled = false;
+}
+
+// ─── RENDER ───────────────────────────────────────────────
+function renderSlides(slides) {
+  const area = document.getElementById('canvasArea');
+  document.getElementById('emptyState').style.display = 'none';
+
+  const theme = THEMES[selectedTheme];
+
+  const existing = area.querySelector('.slides-section');
+  if (existing) existing.remove();
+
+  const section = document.createElement('div');
+  section.className = 'slides-section';
+
+  const header = document.createElement('div');
+  header.className = 'slides-header';
+  header.innerHTML = `
+    <h2>${slides.length} Slides Ready ✦</h2>
+    <button class="export-btn" onclick="exportSlides()">⬇ Copy All Text</button>
+  `;
+  section.appendChild(header);
+
+  const scroll = document.createElement('div');
+  scroll.className = 'slides-scroll';
+
+  slides.forEach((slide, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'slide-wrap';
+
+    const num = document.createElement('div');
+    num.className = 'slide-num';
+    num.textContent = `Slide ${i + 1} of ${slides.length}`;
+
+    const el = document.createElement('div');
+    el.className = `slide slide-type-${slide.type}`;
+    if (!slide.photo) el.style.background = theme.bg;
+    el.onclick = () => openEdit(i);
+
+    const overlayOpacity = (parseInt(document.getElementById('overlayOpacity').value) / 100).toFixed(2);
+    const overlayColor = selectedTheme === 'clean-white'
+      ? `rgba(255,255,255,${overlayOpacity})`
+      : `rgba(0,0,0,${overlayOpacity})`;
+
+    const badgeLabels = { hook: '🔥 Hook', tip: '💡 Tip', feature: '⚡ Feature', comparison: '↔ Before/After', stat: '📊 Stat', myth: '❌ Myth', cta: '👋 CTA' };
+
+    el.innerHTML = `
+      ${slide.photo ? `<img class="slide-photo" src="${slide.photo}" loading="lazy" alt="">` : ''}
+      ${slide.photo ? `<div class="slide-photo-overlay" style="background:${overlayColor}"></div>` : ''}
+      ${!slide.photo && document.getElementById('unsplashKey').value.trim() ? `<div class="photo-loading">loading photo...</div>` : ''}
+      <div class="slide-inner">
+        <div class="slide-badge" style="background:${theme.badge_bg}; color:${theme.accent}">
+          ${badgeLabels[slide.type] || slide.type}
+        </div>
+        <div class="slide-headline" style="color:${theme.text}; font-size:${getFontSize(slide.headline)}">
+          ${slide.headline}
+        </div>
+        ${slide.sub ? `<div class="slide-sub" style="color:${theme.sub}">${slide.sub}</div>` : ''}
+        ${slide.type === 'cta' ? `<div class="slide-cta-text" style="color:${theme.accent}; margin-top:auto; padding-top:16px">→ ${slide.sub}</div>` : ''}
+        <div class="slide-number-pill" style="background:${theme.num}; color:${theme.text}">${i+1}</div>
+      </div>
+      ${slide.photoCredit ? `<a class="photo-credit" href="${slide.photoCreditLink}" target="_blank">📷 ${slide.photoCredit} / Unsplash</a>` : ''}
+      <div class="slide-edit-overlay">
+        <div style="font-size:20px">✏️</div>
+        <div class="edit-hint">Click to edit</div>
+      </div>
+    `;
+
+    wrap.appendChild(num);
+    wrap.appendChild(el);
+    scroll.appendChild(wrap);
+  });
+
+  section.appendChild(scroll);
+  area.appendChild(section);
+}
+
+function getFontSize(text) {
+  const len = text.length;
+  if (len < 30) return '26px';
+  if (len < 50) return '22px';
+  return '18px';
+}
+
+// ─── EDIT ─────────────────────────────────────────────────
+function openEdit(i) {
+  editingIndex = i;
+  document.getElementById('editHeadline').value = currentSlides[i].headline;
+  document.getElementById('editSub').value = currentSlides[i].sub || '';
+  document.getElementById('modalBg').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modalBg').classList.remove('open');
+  editingIndex = null;
+}
+function saveEdit() {
+  if (editingIndex === null) return;
+  currentSlides[editingIndex].headline = document.getElementById('editHeadline').value;
+  currentSlides[editingIndex].sub = document.getElementById('editSub').value;
+  closeModal();
+  renderSlides(currentSlides);
+  showToast('Slide updated!');
+}
+
+// ─── EXPORT ───────────────────────────────────────────────
+function exportSlides() {
+  const text = currentSlides.map((s, i) =>
+    `SLIDE ${i+1} [${s.type.toUpperCase()}]\n${s.headline}\n${s.sub || ''}`
+  ).join('\n\n---\n\n');
+  navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard! 🎉'));
+}
+
+// ─── HISTORY ──────────────────────────────────────────────
+function saveToHistory(topic, slides) {
+  history.unshift({ topic, slides, theme: selectedTheme, date: Date.now() });
+  if (history.length > 5) history.pop();
+  localStorage.setItem('sf_history', JSON.stringify(history));
+  renderHistory();
+}
+
+function renderHistory() {
+  if (!history.length) return;
+  document.getElementById('historySection').style.display = 'block';
+  const list = document.getElementById('historyList');
+  list.innerHTML = '';
+  history.forEach((item, i) => {
+    const el = document.createElement('div');
+    el.className = 'history-item';
+    el.innerHTML = `
+      <div class="hi-topic">${item.topic}</div>
+      <div class="hi-meta">${item.slides.length} slides · ${timeAgo(item.date)}</div>
+    `;
+    el.onclick = () => {
+      currentSlides = item.slides;
+      selectedTheme = item.theme || selectedTheme;
+      renderSlides(currentSlides);
+    };
+    list.appendChild(el);
+  });
+}
+
+function timeAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+
+// ─── TOAST ────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ─── INIT ─────────────────────────────────────────────────
+renderHistory();
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+</script>
+</body>
+</html>

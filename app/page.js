@@ -759,7 +759,7 @@ duration ${duration}`
           </div>
 
           {/* Anthropic API Settings */}
-          <div className="panel-section" style={{opacity: aiProvider === 'anthropic' ? 1 : 0.4}}>
+          <div className="panel-section" style={{display: aiProvider === 'anthropic' ? "block" : "none"}}>
             <label>Anthropic Model</label>
             <select 
               value={anthropicModel}
@@ -815,12 +815,12 @@ duration ${duration}`
                 setAnthropicKey(e.target.value)
                 localStorage.setItem('sf_anthropicKey', e.target.value)
               }}
-              disabled={aiProvider !== 'anthropic'}
+              
             />
           </div>
 
           {/* Minimax API Settings */}
-          <div className="panel-section" style={{opacity: aiProvider === 'minimax' ? 1 : 0.4}}>
+          <div className="panel-section" style={{display: aiProvider === 'minimax' ? "block" : "none"}}>
             <label>Minimax Model</label>
             <select 
               value={minimaxModel}
@@ -846,7 +846,7 @@ duration ${duration}`
             </select>
           </div>
 
-          <div className="panel-section" style={{opacity: aiProvider === 'minimax' ? 1 : 0.4}}>
+          <div className="panel-section" style={{display: aiProvider === 'minimax' ? "block" : "none"}}>
             <label>Minimax API Base URL</label>
             <input 
               type="text" 
@@ -864,7 +864,7 @@ duration ${duration}`
             </div>
           </div>
 
-          <div className="panel-section" style={{opacity: aiProvider === 'minimax' ? 1 : 0.4}}>
+          <div className="panel-section" style={{display: aiProvider === 'minimax' ? "block" : "none"}}>
             <label>Minimax API Key <a href="https://platform.minimax.io/" target="_blank" style={{color:'var(--accent)',fontSize:'10px',textDecoration:'none',marginLeft:'4px'}}>get key →</a></label>
             <input 
               type="password" 

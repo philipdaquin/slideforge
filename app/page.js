@@ -53,9 +53,13 @@ export default function Home() {
   const [progress, setProgress] = useState(0)
   const [progressActive, setProgressActive] = useState(false)
   const [unsplashKey, setUnsplashKey] = useState('')
+  const [aiProvider, setAiProvider] = useState('anthropic') // 'anthropic' or 'minimax'
   const [anthropicKey, setAnthropicKey] = useState('')
   const [anthropicBaseUrl, setAnthropicBaseUrl] = useState('https://api.anthropic.com')
   const [anthropicModel, setAnthropicModel] = useState('claude-sonnet-4-20250514')
+  const [minimaxKey, setMinimaxKey] = useState('')
+  const [minimaxBaseUrl, setMinimaxBaseUrl] = useState('https://api.minimax.chat/v1')
+  const [minimaxModel, setMinimaxModel] = useState('MiniMax-Text-01')
   const [imageSource, setImageSource] = useState('unsplash') // 'unsplash' or 'pinterest'
   const [pinterestImages, setPinterestImages] = useState({})
   const [pinterestLoading, setPinterestLoading] = useState(false)
@@ -76,11 +80,19 @@ export default function Home() {
     const savedAnthropicKey = localStorage.getItem('sf_anthropicKey')
     const savedAnthropicBaseUrl = localStorage.getItem('sf_anthropicBaseUrl')
     const savedAnthropicModel = localStorage.getItem('sf_anthropicModel')
+    const savedAiProvider = localStorage.getItem('sf_aiProvider')
+    const savedMinimaxKey = localStorage.getItem('sf_minimaxKey')
+    const savedMinimaxBaseUrl = localStorage.getItem('sf_minimaxBaseUrl')
+    const savedMinimaxModel = localStorage.getItem('sf_minimaxModel')
     
     if (savedUnsplashKey) setUnsplashKey(savedUnsplashKey)
     if (savedAnthropicKey) setAnthropicKey(savedAnthropicKey)
     if (savedAnthropicBaseUrl) setAnthropicBaseUrl(savedAnthropicBaseUrl)
     if (savedAnthropicModel) setAnthropicModel(savedAnthropicModel)
+    if (savedAiProvider) setAiProvider(savedAiProvider)
+    if (savedMinimaxKey) setMinimaxKey(savedMinimaxKey)
+    if (savedMinimaxBaseUrl) setMinimaxBaseUrl(savedMinimaxBaseUrl)
+    if (savedMinimaxModel) setMinimaxModel(savedMinimaxModel)
   }, [])
 
   useEffect(() => {
@@ -174,7 +186,8 @@ export default function Home() {
     const tone = document.getElementById('toneSelect')?.value || 'relatable'
 
     if (!topic) { showToastMsg('Add a topic first!'); return; }
-    if (!anthropicKey) { showToastMsg('Add your Anthropic API key first!'); return; }
+    if (aiProvider === 'anthropic' && !anthropicKey) { showToastMsg('Add your Anthropic API key first!'); return; }
+    if (aiProvider === 'minimax' && !minimaxKey) { showToastMsg('Add your Minimax API key first!'); return; }
 
     setLoading(true)
     setProgressActive(true)
@@ -223,23 +236,49 @@ Rules:
 - CTA slide sub must be exactly: "${cta}"`
 
     try {
-      const res = await fetch(`${anthropicBaseUrl}/v1/messages`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-api-key': anthropicKey
-        },
-        body: JSON.stringify({
-          model: anthropicModel,
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: prompt }]
+      let res, data, raw, clean, slides
+      
+      if (aiProvider === 'minimax') {
+        // Minimax API call
+        const minimaxPrompt = `${prompt}\n\nIMPORTANT: Return ONLY a valid JSON array, no markdown formatting, no explanations.`
+        
+        res = await fetch(`${minimaxBaseUrl}/text/chatcompletion_v2?GroupId=${minimaxKey.split(':')[0]}`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${minimaxKey}`
+          },
+          body: JSON.stringify({
+            model: minimaxModel,
+            messages: [{ role: 'user', content: minimaxPrompt }]
+          })
         })
-      })
+        
+        data = await res.json()
+        // Minimax returns different response format
+        raw = data.choices?.[0]?.message?.content || ''
+        clean = raw.replace(/```json|```/g, '').trim()
+        slides = JSON.parse(clean)
+      } else {
+        // Anthropic API call
+        res = await fetch(`${anthropicBaseUrl}/v1/messages`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-api-key': anthropicKey
+          },
+          body: JSON.stringify({
+            model: anthropicModel,
+            max_tokens: 1000,
+            messages: [{ role: 'user', content: prompt }]
+          })
+        })
 
-      const data = await res.json()
-      const raw = data.content.map(b => b.text || '').join('')
-      const clean = raw.replace(/```json|```/g, '').trim()
-      const slides = JSON.parse(clean)
+        data = await res.json()
+        raw = data.content.map(b => b.text || '').join('')
+        clean = raw.replace(/```json|```/g, '').trim()
+        slides = JSON.parse(clean)
+      }
 
       clearInterval(progInterval)
       setProgress(100)
@@ -585,8 +624,33 @@ Rules:
             )}
           </div>
 
-          {/* Anthropic API Settings */}
+          {/* AI Provider Selector */}
           <div className="panel-section">
+            <label>AI Provider</label>
+            <select 
+              value={aiProvider}
+              onChange={(e) => {
+                setAiProvider(e.target.value)
+                localStorage.setItem('sf_aiProvider', e.target.value)
+              }}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                fontSize: '12px',
+                background: 'var(--surface2)',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                color: 'var(--text)',
+                outline: 'none'
+              }}
+            >
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="minimax">Minimax</option>
+            </select>
+          </div>
+
+          {/* Anthropic API Settings */}
+          <div className="panel-section" style={{opacity: aiProvider === 'anthropic' ? 1 : 0.4}}>
             <label>Anthropic Model</label>
             <select 
               value={anthropicModel}
@@ -642,7 +706,71 @@ Rules:
                 setAnthropicKey(e.target.value)
                 localStorage.setItem('sf_anthropicKey', e.target.value)
               }}
+              disabled={aiProvider !== 'anthropic'}
             />
+          </div>
+
+          {/* Minimax API Settings */}
+          <div className="panel-section" style={{opacity: aiProvider === 'minimax' ? 1 : 0.4}}>
+            <label>Minimax Model</label>
+            <select 
+              value={minimaxModel}
+              onChange={(e) => {
+                setMinimaxModel(e.target.value)
+                localStorage.setItem('sf_minimaxModel', e.target.value)
+              }}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                fontSize: '12px',
+                background: 'var(--surface2)',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                color: 'var(--text)',
+                outline: 'none'
+              }}
+              disabled={aiProvider !== 'minimax'}
+            >
+              <option value="MiniMax-Text-01">MiniMax Text 01 (Recommended)</option>
+              <option value="abab6.5s-chat">ABAB 6.5S Chat</option>
+              <option value="abab6-chat">ABAB 6 Chat</option>
+            </select>
+          </div>
+
+          <div className="panel-section" style={{opacity: aiProvider === 'minimax' ? 1 : 0.4}}>
+            <label>Minimax API Base URL</label>
+            <input 
+              type="text" 
+              placeholder="https://api.minimax.chat/v1" 
+              style={{fontSize:'12px'}}
+              value={minimaxBaseUrl}
+              onChange={(e) => {
+                setMinimaxBaseUrl(e.target.value)
+                localStorage.setItem('sf_minimaxBaseUrl', e.target.value)
+              }}
+              disabled={aiProvider !== 'minimax'}
+            />
+            <div style={{fontSize:'10px',color:'var(--muted)',marginTop:'4px'}}>
+              Default: https://api.minimax.chat/v1
+            </div>
+          </div>
+
+          <div className="panel-section" style={{opacity: aiProvider === 'minimax' ? 1 : 0.4}}>
+            <label>Minimax API Key <a href="https://platform.minimax.io/" target="_blank" style={{color:'var(--accent)',fontSize:'10px',textDecoration:'none',marginLeft:'4px'}}>get key →</a></label>
+            <input 
+              type="password" 
+              placeholder="API Key (e.g., your_key:your_group_id)" 
+              style={{fontSize:'12px'}}
+              value={minimaxKey}
+              onChange={(e) => {
+                setMinimaxKey(e.target.value)
+                localStorage.setItem('sf_minimaxKey', e.target.value)
+              }}
+              disabled={aiProvider !== 'minimax'}
+            />
+            <div style={{fontSize:'10px',color:'var(--muted)',marginTop:'4px'}}>
+              Format: your_api_key:group_id
+            </div>
           </div>
 
           <div className="panel-section" style={{opacity: imageSource === 'unsplash' ? 1 : 0.5}}>

@@ -52,7 +52,7 @@ export default function Home() {
   const [editSub, setEditSub] = useState('')
   const [progress, setProgress] = useState(0)
   const [progressActive, setProgressActive] = useState(false)
-  const [pexelsKey, setPexelsKey] = useState('')
+  const [unsplashKey, setUnsplashKey] = useState('')
   const [testResult, setTestResult] = useState('')
   const [testLoading, setTestLoading] = useState(false)
   const [importingIndex, setImportingIndex] = useState(null)
@@ -78,19 +78,21 @@ export default function Home() {
     setShowToast(true)
   }
 
-  const testPexels = async () => {
-    if (!pexelsKey) {
+  const testUnsplash = async () => {
+    if (!unsplashKey) {
       setTestResult('⚠ Paste your key first')
       return
     }
     setTestLoading(true)
     setTestResult('')
     try {
-      const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent('https://api.pexels.com/v1/search?query=calm&per_page=1')}`, {
-        headers: { Authorization: pexelsKey }
+      const res = await fetch(`https://api.unsplash.com/photos/random?query=calm&count=1`, {
+        headers: { Authorization: `Client-ID ${unsplashKey}` }
       })
       const data = await res.json()
-      if (data.photos && data.photos.length) {
+      if (data.errors) {
+        setTestResult('✗ Key invalid: ' + data.errors[0])
+      } else if (data.length) {
         setTestResult('✓ Key works! Photos will load on generate.')
       } else {
         throw new Error('no photos')
@@ -105,14 +107,14 @@ export default function Home() {
     const queries = [keyword, 'calm lifestyle minimal', 'peaceful person']
     for (const q of queries) {
       try {
-        const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(`https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&orientation=portrait&per_page=10`)}`, {
-          headers: { Authorization: accessKey }
+        const res = await fetch(`https://api.unsplash.com/photos/random?query=${encodeURIComponent(q)}&orientation=portrait&count=10`, {
+          headers: { Authorization: `Client-ID ${accessKey}` }
         })
         if (res.ok) {
           const data = await res.json()
-          if (data.photos && data.photos.length) {
-            const photo = data.photos[Math.floor(Math.random() * data.photos.length)]
-            return { url: photo.src.large, credit: photo.photographer, creditLink: photo.photographer_url }
+          if (!data.errors && data.length) {
+            const photo = data[Math.floor(Math.random() * data.length)]
+            return { url: photo.urls.regular, credit: photo.user.name, creditLink: photo.user.links.html }
           }
         }
       } catch (e) { console.warn('Photo fetch failed:', e) }
@@ -210,11 +212,11 @@ Rules:
 
       setCurrentSlides(slides)
       
-      if (pexelsKey) {
+      if (unsplashKey) {
         slides.forEach((slide, i) => { slide.photo = null; slide.photoCredit = null; slide.photoCreditLink = null; })
         setCurrentSlides([...slides])
         await Promise.all(slides.map(async (slide, i) => {
-          const photo = await fetchPhoto(getPhotoKeyword(slide), pexelsKey)
+          const photo = await fetchPhoto(getPhotoKeyword(slide), unsplashKey)
           if (photo) {
             slides[i].photo = photo.url
             slides[i].photoCredit = photo.credit
@@ -456,18 +458,18 @@ Rules:
           </div>
 
           <div className="panel-section">
-            <label>Pexels API Key <a href="https://www.pexels.com/api/" target="_blank" style={{color:'var(--accent)',fontSize:'10px',textDecoration:'none',marginLeft:'4px'}}>get free key →</a></label>
+            <label>Unsplash API Key <a href="https://unsplash.com/developers" target="_blank" style={{color:'var(--accent)',fontSize:'10px',textDecoration:'none',marginLeft:'4px'}}>get free key →</a></label>
             <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
               <input 
                 type="text" 
                 id="unsplashKey" 
-                placeholder="Paste your Pexels API Key" 
+                placeholder="Paste your Unsplash Access Key" 
                 style={{fontSize:'12px',flex:1}}
-                value={pexelsKey}
-                onChange={(e) => setPexelsKey(e.target.value)}
+                value={unsplashKey}
+                onChange={(e) => setUnsplashKey(e.target.value)}
               />
               <button 
-                onClick={testPexels} 
+                onClick={testUnsplash} 
                 style={{padding:'10px 12px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'10px',color:'var(--text)',fontSize:'12px',cursor:'pointer',whiteSpace:'nowrap'}}
                 disabled={testLoading}
               >
@@ -566,7 +568,7 @@ Rules:
                           <div className="slide-photo-overlay" style={{background: overlayColor}}></div>
                         </>
                       )}
-                      {!slide.photo && pexelsKey && <div className="photo-loading">loading photo...</div>}
+                      {!slide.photo && unsplashKey && <div className="photo-loading">loading photo...</div>}
                       <div className="slide-inner">
                         <div className="slide-badge" style={{background: theme.badge_bg, color: theme.accent}}>
                           {badgeLabels[slide.type] || slide.type}
@@ -584,7 +586,7 @@ Rules:
                       </div>
                       {slide.photoCredit && (
                         <a className="photo-credit" href={slide.photoCreditLink} target="_blank" rel="noopener noreferrer">
-                          📷 {slide.photoCredit} / Pexels
+                          📷 {slide.photoCredit} / Unsplash
                         </a>
                       )}
                       {slide.photo && !slide.photoCredit && (

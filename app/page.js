@@ -53,6 +53,9 @@ export default function Home() {
   const [progress, setProgress] = useState(0)
   const [progressActive, setProgressActive] = useState(false)
   const [unsplashKey, setUnsplashKey] = useState('')
+  const [imageSource, setImageSource] = useState('unsplash') // 'unsplash' or 'pinterest'
+  const [pinterestImages, setPinterestImages] = useState({})
+  const [pinterestLoading, setPinterestLoading] = useState(false)
   const [testResult, setTestResult] = useState('')
   const [testLoading, setTestLoading] = useState(false)
   const [importingIndex, setImportingIndex] = useState(null)
@@ -120,6 +123,20 @@ export default function Home() {
       } catch (e) { console.warn('Photo fetch failed:', e) }
     }
     return null
+  }
+
+  // Fetch images from Pinterest API
+  const fetchPinterestImages = async (keyword) => {
+    try {
+      const res = await fetch(`/api/images/pinterest?q=${encodeURIComponent(keyword)}`)
+      const data = await res.json()
+      if (data.success && data.images && data.images.length > 0) {
+        return data.images
+      }
+    } catch (e) {
+      console.warn('Pinterest fetch failed:', e)
+    }
+    return []
   }
 
   const getPhotoKeyword = (slide) => {
@@ -212,7 +229,8 @@ Rules:
 
       setCurrentSlides(slides)
       
-      if (unsplashKey) {
+      // Fetch photos based on selected source
+      if (imageSource === 'unsplash' && unsplashKey) {
         slides.forEach((slide, i) => { slide.photo = null; slide.photoCredit = null; slide.photoCreditLink = null; })
         setCurrentSlides([...slides])
         await Promise.all(slides.map(async (slide, i) => {
@@ -224,6 +242,51 @@ Rules:
           }
           setCurrentSlides([...slides])
         }))
+      } else if (imageSource === 'pinterest') {
+        // Fetch images from Pinterest
+        setPinterestLoading(true)
+        showToastMsg('Fetching Pinterest images...')
+        
+        // Get unique keywords for each slide type
+        const keywords = slides.map(slide => getPhotoKeyword(slide))
+        const uniqueKeywords = [...new Set(keywords)]
+        
+        // Fetch images for each unique keyword
+        const pinterestCache = {}
+        for (const keyword of uniqueKeywords) {
+          const images = await fetchPinterestImages(keyword)
+          if (images.length > 0) {
+            pinterestCache[keyword] = images
+          }
+        }
+        
+        setPinterestImages(pinterestCache)
+        setPinterestLoading(false)
+        
+        // Assign images to slides
+        slides.forEach((slide, i) => { 
+          slide.photo = null; 
+          slide.photoCredit = 'Pinterest'; 
+          slide.photoCreditLink = 'https://pinterest.com';
+        })
+        setCurrentSlides([...slides])
+        
+        // Assign random Pinterest images to each slide
+        await Promise.all(slides.map(async (slide, i) => {
+          const keyword = getPhotoKeyword(slide)
+          const images = pinterestCache[keyword]
+          if (images && images.length > 0) {
+            const randomImage = images[Math.floor(Math.random() * images.length)]
+            slides[i].photo = randomImage
+          }
+          setCurrentSlides([...slides])
+        }))
+        
+        if (slides.some(s => s.photo)) {
+          showToastMsg('Pinterest images loaded! 🎨')
+        } else {
+          showToastMsg('No Pinterest images found. Try different keywords.')
+        }
       }
       saveToHistory(topic, slides)
 
@@ -458,6 +521,53 @@ Rules:
           </div>
 
           <div className="panel-section">
+            <label>Image Source</label>
+            <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+              <div style={{display:'flex',background:'var(--surface2)',borderRadius:'10px',padding:'4px',gap:'4px',flex:1}}>
+                <button
+                  onClick={() => setImageSource('unsplash')}
+                  style={{
+                    flex:1,
+                    padding:'10px 8px',
+                    background: imageSource === 'unsplash' ? 'var(--accent)' : 'transparent',
+                    border:'none',
+                    borderRadius:'8px',
+                    color: imageSource === 'unsplash' ? '#000' : 'var(--text)',
+                    fontSize:'12px',
+                    cursor:'pointer',
+                    fontWeight: imageSource === 'unsplash' ? '600' : '400',
+                    transition:'all 0.2s'
+                  }}
+                >
+                  📷 Unsplash
+                </button>
+                <button
+                  onClick={() => setImageSource('pinterest')}
+                  style={{
+                    flex:1,
+                    padding:'10px 8px',
+                    background: imageSource === 'pinterest' ? 'var(--accent)' : 'transparent',
+                    border:'none',
+                    borderRadius:'8px',
+                    color: imageSource === 'pinterest' ? '#000' : 'var(--text)',
+                    fontSize:'12px',
+                    cursor:'pointer',
+                    fontWeight: imageSource === 'pinterest' ? '600' : '400',
+                    transition:'all 0.2s'
+                  }}
+                >
+                  🎨 Pinterest
+                </button>
+              </div>
+            </div>
+            {imageSource === 'pinterest' && (
+              <div style={{fontSize:'10px',color:'var(--muted)',marginTop:'6px'}}>
+                Uses browser automation to search Pinterest
+              </div>
+            )}
+          </div>
+
+          <div className="panel-section" style={{opacity: imageSource === 'unsplash' ? 1 : 0.5}}>
             <label>Unsplash API Key <a href="https://unsplash.com/developers" target="_blank" style={{color:'var(--accent)',fontSize:'10px',textDecoration:'none',marginLeft:'4px'}}>get free key →</a></label>
             <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
               <input 
@@ -568,7 +678,11 @@ Rules:
                           <div className="slide-photo-overlay" style={{background: overlayColor}}></div>
                         </>
                       )}
-                      {!slide.photo && unsplashKey && <div className="photo-loading">loading photo...</div>}
+                      {!slide.photo && (unsplashKey || imageSource === 'pinterest') && (
+                        <div className="photo-loading">
+                          {pinterestLoading ? 'loading Pinterest images...' : 'loading photo...'}
+                        </div>
+                      )}
                       <div className="slide-inner">
                         <div className="slide-badge" style={{background: theme.badge_bg, color: theme.accent}}>
                           {badgeLabels[slide.type] || slide.type}
@@ -586,7 +700,7 @@ Rules:
                       </div>
                       {slide.photoCredit && (
                         <a className="photo-credit" href={slide.photoCreditLink} target="_blank" rel="noopener noreferrer">
-                          📷 {slide.photoCredit} / Unsplash
+                          📷 {slide.photoCredit} {slide.photoCreditLink === 'https://pinterest.com' ? '/ Pinterest' : '/ Unsplash'}
                         </a>
                       )}
                       {slide.photo && !slide.photoCredit && (

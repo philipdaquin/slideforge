@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import html2canvas from 'html2canvas'
 import JSZip from 'jszip'
+import { FFmpeg } from '@ffmpeg/ffmpeg'
+import { fetchFile, toBlobURL } from '@ffmpeg/util'
 
 const THEMES = {
   'dark-purple': {
@@ -56,6 +58,11 @@ export default function Home() {
   const [testResult, setTestResult] = useState('')
   const [testLoading, setTestLoading] = useState(false)
   const [importingIndex, setImportingIndex] = useState(null)
+  const [videoDuration, setVideoDuration] = useState(3)
+  const [videoGenerating, setVideoGenerating] = useState(false)
+  const [videoProgress, setVideoProgress] = useState(0)
+  const [ffmpegLoaded, setFfmpegLoaded] = useState(false)
+  const ffmpegRef = useRef(null)
   const fileInputRef = useRef(null)
   const slideRefs = useRef({})
 
@@ -352,6 +359,108 @@ Rules:
     showToastMsg('Downloaded carousel!')
   }
 
+  // Initialize FFmpeg
+  const initFFmpeg = async () => {
+    if (ffmpegRef.current) return ffmpegRef.current
+    
+    const ffmpeg = new FFmpeg()
+    ffmpegRef.current = ffmpeg
+    
+    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm'
+    try {
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      })
+      setFfmpegLoaded(true)
+      showToastMsg('Video engine ready! 🎬')
+    } catch (e) {
+      console.error('FFmpeg load failed:', e)
+      showToastMsg('Video engine failed to load')
+    }
+    return ffmpeg
+  }
+
+  // Generate video from slides
+  const generateVideo = async () => {
+    if (currentSlides.length === 0) return
+    
+    showToastMsg('Generating video... 🎬')
+    setVideoGenerating(true)
+    setVideoProgress(0)
+    
+    try {
+      const ffmpeg = await initFFmpeg()
+      
+      // Convert slides to images
+      const images = []
+      for (let i = 0; i < currentSlides.length; i++) {
+        const slideEl = slideRefs.current[i]
+        if (slideEl) {
+          const canvas = await html2canvas(slideEl, {
+            scale: 1,
+            useCORS: true,
+            backgroundColor: null,
+            logging: false,
+            width: 1080,
+            height: 1920
+          })
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+          const data = await blob.arrayBuffer()
+          await ffmpeg.writeFile(`slide${i}.png`, new Uint8Array(data))
+          images.push(`slide${i}.png`)
+        }
+        setVideoProgress(Math.round(((i + 1) / currentSlides.length) * 50))
+      }
+      
+      // Create concat file for ffmpeg
+      const duration = videoDuration
+      const concatContent = images.map((img, i) => 
+        `file '${img}'
+duration ${duration}`
+      ).join('\n') + `\nfile '${images[images.length - 1]}'`
+      
+      await ffmpeg.writeFile('concat.txt', concatContent)
+      
+      setVideoProgress(60)
+      
+      // Run ffmpeg to create video
+      await ffmpeg.exec([
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', 'concat.txt',
+        '-vf', 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2',
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        '-r', '30',
+        '-y',
+        'output.mp4'
+      ])
+      
+      setVideoProgress(90)
+      
+      // Read and download the video
+      const data = await ffmpeg.readFile('output.mp4')
+      const blob = new Blob([data.buffer], { type: 'video/mp4' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'tiktok-carousel.mp4'
+      a.click()
+      URL.revokeObjectURL(url)
+      
+      setVideoProgress(100)
+      showToastMsg('Video downloaded! 🎬')
+      
+    } catch (e) {
+      console.error('Video generation failed:', e)
+      showToastMsg('Video generation failed. Try again.')
+    }
+    
+    setVideoGenerating(false)
+    setTimeout(() => setVideoProgress(0), 1000)
+  }
+
   const theme = THEMES[selectedTheme]
   const overlayColor = selectedTheme === 'clean-white'
     ? `rgba(255,255,255,${overlayOpacity / 100})`
@@ -505,9 +614,53 @@ Rules:
             </div>
           </div>
 
+          <div className="panel-section">
+            <label>Video: Seconds Per Slide</label>
+            <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+              <input 
+                type="range" 
+                min="2" 
+                max="8" 
+                value={videoDuration}
+                onChange={(e) => setVideoDuration(parseInt(e.target.value))}
+                style={{flex:1,padding:0,background:'transparent',border:'none',accentColor:'var(--accent)'}} 
+              />
+              <span style={{fontSize:'12px',color:'var(--muted)',width:'30px'}}>{videoDuration}s</span>
+            </div>
+          </div>
+
           <button className={`gen-btn ${loading ? 'loading' : ''}`} onClick={generateSlides} disabled={loading}>
             <div className="spinner"></div>
             <span className="btn-text">✦ Generate Carousel</span>
+          </button>
+
+          <button 
+            className="gen-btn" 
+            style={{background: '#fc5c7d', marginTop: '8px'}}
+            onClick={async () => {
+              // First generate slides
+              await generateSlides()
+              // Wait a bit for slides to be ready
+              setTimeout(async () => {
+                // Then fetch images if we have a key
+                if (pexelsKey && currentSlides.length > 0) {
+                  const newSlides = [...currentSlides]
+                  await Promise.all(newSlides.map(async (slide, i) => {
+                    const photo = await fetchPhoto(getPhotoKeyword(slide), pexelsKey)
+                    if (photo) {
+                      newSlides[i].photo = photo.url
+                      newSlides[i].photoCredit = photo.credit
+                      newSlides[i].photoCreditLink = photo.creditLink
+                    }
+                  }))
+                  setCurrentSlides([...newSlides])
+                }
+                // Then generate video
+                setTimeout(() => generateVideo(), 1000)
+              }, 2000)
+            }}
+          >
+            <span className="btn-text">🎬 Auto-Generate Video</span>
           </button>
 
           <div className={`progress-bar ${progressActive ? 'active' : ''}`}>
@@ -548,6 +701,14 @@ Rules:
                 <div style={{display:'flex', gap:'8px'}}>
                   <button className="export-btn" onClick={exportSlides}>⬇ Copy Text</button>
                   <button className="export-btn" style={{background:'var(--accent)'}} onClick={exportSlidesAsImages}>⬇ Download Images</button>
+                  <button 
+                    className="export-btn" 
+                    style={{background: videoGenerating ? 'var(--surface2)' : '#fc5c7d'}} 
+                    onClick={generateVideo}
+                    disabled={videoGenerating}
+                  >
+                    {videoGenerating ? `🎬 ${videoProgress}%` : '🎬 Download Video'}
+                  </button>
                 </div>
               </div>
               <div className="slides-scroll">

@@ -53,6 +53,9 @@ export default function Home() {
   const [progress, setProgress] = useState(0)
   const [progressActive, setProgressActive] = useState(false)
   const [unsplashKey, setUnsplashKey] = useState('')
+  const [anthropicKey, setAnthropicKey] = useState('')
+  const [anthropicBaseUrl, setAnthropicBaseUrl] = useState('https://api.anthropic.com')
+  const [anthropicModel, setAnthropicModel] = useState('claude-sonnet-4-20250514')
   const [imageSource, setImageSource] = useState('unsplash') // 'unsplash' or 'pinterest'
   const [pinterestImages, setPinterestImages] = useState({})
   const [pinterestLoading, setPinterestLoading] = useState(false)
@@ -67,6 +70,17 @@ export default function Home() {
     if (savedHistory) {
       setHistory(JSON.parse(savedHistory))
     }
+    
+    // Load saved API settings
+    const savedUnsplashKey = localStorage.getItem('sf_unsplashKey')
+    const savedAnthropicKey = localStorage.getItem('sf_anthropicKey')
+    const savedAnthropicBaseUrl = localStorage.getItem('sf_anthropicBaseUrl')
+    const savedAnthropicModel = localStorage.getItem('sf_anthropicModel')
+    
+    if (savedUnsplashKey) setUnsplashKey(savedUnsplashKey)
+    if (savedAnthropicKey) setAnthropicKey(savedAnthropicKey)
+    if (savedAnthropicBaseUrl) setAnthropicBaseUrl(savedAnthropicBaseUrl)
+    if (savedAnthropicModel) setAnthropicModel(savedAnthropicModel)
   }, [])
 
   useEffect(() => {
@@ -160,6 +174,7 @@ export default function Home() {
     const tone = document.getElementById('toneSelect')?.value || 'relatable'
 
     if (!topic) { showToastMsg('Add a topic first!'); return; }
+    if (!anthropicKey) { showToastMsg('Add your Anthropic API key first!'); return; }
 
     setLoading(true)
     setProgressActive(true)
@@ -208,11 +223,14 @@ Rules:
 - CTA slide sub must be exactly: "${cta}"`
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch(`${anthropicBaseUrl}/v1/messages`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicKey
+        },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: anthropicModel,
           max_tokens: 1000,
           messages: [{ role: 'user', content: prompt }]
         })
@@ -567,6 +585,66 @@ Rules:
             )}
           </div>
 
+          {/* Anthropic API Settings */}
+          <div className="panel-section">
+            <label>Anthropic Model</label>
+            <select 
+              value={anthropicModel}
+              onChange={(e) => {
+                setAnthropicModel(e.target.value)
+                localStorage.setItem('sf_anthropicModel', e.target.value)
+              }}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                fontSize: '12px',
+                background: 'var(--surface2)',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                color: 'var(--text)',
+                outline: 'none'
+              }}
+            >
+              <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (Recommended)</option>
+              <option value="claude-4-opus-20250514">Claude Opus 4 (Best Quality)</option>
+              <option value="claude-4-haiku-20250514">Claude Haiku 4 (Fastest)</option>
+              <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+              <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
+              <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+            </select>
+          </div>
+
+          <div className="panel-section">
+            <label>Anthropic API Base URL</label>
+            <input 
+              type="text" 
+              placeholder="https://api.anthropic.com" 
+              style={{fontSize:'12px'}}
+              value={anthropicBaseUrl}
+              onChange={(e) => {
+                setAnthropicBaseUrl(e.target.value)
+                localStorage.setItem('sf_anthropicBaseUrl', e.target.value)
+              }}
+            />
+            <div style={{fontSize:'10px',color:'var(--muted)',marginTop:'4px'}}>
+              Default: https://api.anthropic.com
+            </div>
+          </div>
+
+          <div className="panel-section">
+            <label>Anthropic API Key <a href="https://console.anthropic.com/" target="_blank" style={{color:'var(--accent)',fontSize:'10px',textDecoration:'none',marginLeft:'4px'}}>get key →</a></label>
+            <input 
+              type="password" 
+              placeholder="sk-ant-..." 
+              style={{fontSize:'12px'}}
+              value={anthropicKey}
+              onChange={(e) => {
+                setAnthropicKey(e.target.value)
+                localStorage.setItem('sf_anthropicKey', e.target.value)
+              }}
+            />
+          </div>
+
           <div className="panel-section" style={{opacity: imageSource === 'unsplash' ? 1 : 0.5}}>
             <label>Unsplash API Key <a href="https://unsplash.com/developers" target="_blank" style={{color:'var(--accent)',fontSize:'10px',textDecoration:'none',marginLeft:'4px'}}>get free key →</a></label>
             <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
@@ -576,7 +654,10 @@ Rules:
                 placeholder="Paste your Unsplash Access Key" 
                 style={{fontSize:'12px',flex:1}}
                 value={unsplashKey}
-                onChange={(e) => setUnsplashKey(e.target.value)}
+                onChange={(e) => {
+                  setUnsplashKey(e.target.value)
+                  localStorage.setItem('sf_unsplashKey', e.target.value)
+                }}
               />
               <button 
                 onClick={testUnsplash} 
